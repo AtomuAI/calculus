@@ -1,0 +1,11 @@
+[package]
+name = "calculus"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+thiserror = "2.0.4"
+linear-algebra = { path = "../../linear-algebra/rust" }

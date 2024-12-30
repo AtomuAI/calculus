@@ -2,20 +2,13 @@
 use std::ops::{ Div, Sub };
 use num::traits::{ Num, Signed, abs };
 
-fn _newton_raphson<T>( x: T, y: T, dy: T ) -> T
-where
-    T: Copy + Div<Output = T> + Sub<Output = T>
-{
-    x - ( y / dy )
-}
-
 pub fn newton_raphson<T, F, DF>( x: T, f: F, df: DF ) -> T
 where
     T: Copy + Div<Output = T> + Sub<Output = T>,
     F: Copy + Fn( T ) -> T ,
     DF: Copy + Fn( T ) -> T
 {
-    _newton_raphson( x, f( x ), df( x ) )
+    x - ( f( x ) / df( x ) )
 }
 
 pub struct NewtonRalphsonSolver<T, F, DF>
@@ -70,16 +63,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_newton_raphson_direct() {
-        let mut x: f32 = 0.5;
-        for _ in 0..10 {
-            println!( "{}", x );
-            x = _newton_raphson( x, x.powi(2) - 2.0, 2.0 * x );
-        }
-        println!( "{}", x );
-    }
 
     #[test]
     fn test_newton_raphson() {

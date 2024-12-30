@@ -6,3 +6,5 @@
 
 pub mod newton_raphson;
 pub mod euler;
+pub mod runge_kutta;
+pub mod solver;

@@ -2,110 +2,90 @@
 use std::ops::{ Add, AddAssign, Mul };
 use num::traits::{ Num, Signed, abs };
 
-fn _euler<T>( y: T, dx: T, dydx: T ) -> T
+use crate::solver::Solver;
+
+pub fn euler<T, U, DF>( state: T, ds: U, dsds: DF ) -> T
 where
-    T: Copy + Add<Output = T> + Mul<Output = T>
+    T: Copy + Add<Output = T> + Add<U, Output = T> + Mul<Output = T> + Mul<U, Output = T>,
+    U: Copy + Add<Output = U> + Mul<Output = U>,
+    DF: Copy + Fn( T, U ) -> T
 {
-    y + ( dx * dydx ) // y1 = y0 + ( dx * dy/dx ) -> y1 = y0 + dy
+    state + ( dsds( state, ds ) * ds ) // y1 = y0 + ( dx * dy/dx ) -> y1 = y0 + dy
 }
 
-pub fn euler<T, DF>( x: T, y: T, dx: T, dydx: DF ) -> T
+pub struct EulerSolver<T, U, DF>
 where
     T: Copy + Add<Output = T> + Mul<Output = T>,
-    DF: Copy + Fn( T ) -> T
+    U: Copy,
+    DF: Fn( T, U ) -> T
 {
-    _euler( y, dx, dydx( x ) )
+    solver: Solver<fn( T, U, DF ) -> T, T, U, DF>,
 }
 
-pub struct EulerSolver<T, DF>
+impl <T, U, DF> EulerSolver<T, U, DF>
 where
-    T: Copy + Add<Output = T> + Mul<Output = T>,
-    DF: Fn( T ) -> T
+    T: Copy + Add<Output = T> + Add<U, Output = T> + Mul<Output = T> + Mul<U, Output = T>,
+    U: Copy + Add<Output = U> + Mul<Output = U>,
+    DF: Copy + Fn( T, U ) -> T
 {
-    dydx: DF,
-    x: T,
-    y: T
-}
-
-impl <T, DF> EulerSolver<T, DF>
-where
-    T: Copy + Add<Output = T> + Mul<Output = T> + AddAssign,
-    DF: Copy + Fn( T ) -> T
-{
-    pub fn new( x: T, y: T, dydx: DF ) -> Self {
+    pub fn new( state: T, dsds: DF ) -> Self {
         Self {
-            dydx,
-            x,
-            y
+            solver: Solver::new( euler, state, dsds )
         }
     }
 
-    pub fn step( &mut self, dx: T ) {
-        self.y = euler( self.x, self.y, dx, self.dydx );
-        self.x += dx;
+    pub fn step( &mut self, ds: U ) {
+        *self.solver.state_mut() = euler( self.solver.state(), ds, self.solver.dsds() );
     }
 
-    pub fn solve( &mut self, dx: T, steps: usize ) {
+    pub fn solve( &mut self, ds: U, steps: usize ) {
         for _ in 0..steps {
-            self.step( dx );
+            self.step( ds );
         }
     }
 
-    pub fn x( &self ) -> T {
-        self.x
-    }
-
-    pub fn y( &self ) -> T {
-        self.y
+    pub fn state( &self ) -> T {
+        self.solver.state()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_euler_direct() {
-        let mut y: f32 = 0.0; // y0
-        println!( "{}", y );
-        for t in 0..10 {
-            y = _euler( 1.0, y, 2.0 * ( t as f32 ) );
-            println!( "{}", y );
-        }
-    }
+    use linear_algebra::vector::Vector;
 
     #[test]
     fn test_euler() {
-        let mut y: f32 = 0.0; // y0
-        println!( "{}", y );
-        for t in 0..10 {
-            y = euler( 1.0, t as f32, y, |t| 2.0 * t );
-            println!( "{}", y );
+        let mut state = Vector::<f32, 2>::new( [ 0.0, 0.0 ] );
+        println!( "{:?}", state );
+        for _ in 0..10 {
+            state = euler( state, 1.0, |state, ds| [ 2.0 * state[ 1 ], state[ 1 ] + ds ].into() );
+            println!( "{:?}", state );
         }
     }
 
     #[test]
     fn test_euler_step() {
         let mut solver = EulerSolver::new(
-            0.0_f32, // x0
-            0.0_f32, // y0
-            |x| 2.0 * x
+            Vector::<f32, 2>::new( [ 0.0, 0.0 ] ),
+            |state, ds| [ 2.0 * state[ 1 ], state[ 1 ] + ds ].into()
         );
-        println!( "{}", solver.x() );
+        println!( "{:?}", solver.state() );
         for _ in 0..10 {
             solver.step( 1.0 );
-            println!( "{}", solver.y() );
+            println!( "{:?}", solver.state() );
         }
     }
 
     #[test]
     fn test_euler_solver() {
         let mut solver = EulerSolver::new(
-            0.0_f32, // x0
-            0.0_f32, // y0
-            |x| 2.0 * x
+            Vector::<f32, 2>::new( [ 0.0, 0.0 ] ),
+            |state, ds| [ 2.0 * state[ 1 ], state[ 1 ] + ds ].into()
         );
+        let start = std::time::Instant::now();
         solver.solve( 1.0, 10 );
-        println!( "{}", solver.y() );
+        println!( "Time: {:?}", start.elapsed() );
+        println!( "{:?}", solver.state() );
     }
 }

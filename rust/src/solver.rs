@@ -1,57 +1,70 @@
+use std::ops::AddAssign;
 
-pub struct Solver<M, T, U, DF>
+
+pub struct Solver<M, S, T, DF>
 where
-    M: Fn( T, U, DF ) -> T,
-    T: Copy,
-    U: Copy,
-    DF: Fn( T, U ) -> T
+    M: Fn( S, T, T, DF ) -> S,
+    S: Copy,
+    T: Copy + AddAssign,
+    DF: Fn( S, T ) -> S
 {
     method: M, // method to solve the system
-    dsds: DF, // function of change of state: ds_1/ds_0
-    state: T, // state of the system
-    phantom: std::marker::PhantomData<U>
+    dsdt: DF, // function of change of state: ds_1/ds_0
+    state: S, // state of the system
+    time: T, // time step
+    phantom: std::marker::PhantomData<T>
 }
 
-impl <M, T, U, DF> Solver<M, T, U, DF>
+impl <M, S, T, DF> Solver<M, S, T, DF>
 where
-    M: Copy + Fn( T, U, DF ) -> T,
-    T: Copy,
-    U: Copy,
-    DF: Copy + Fn( T, U ) -> T
+    M: Copy + Fn( S, T, T, DF ) -> S,
+    S: Copy,
+    T: Copy + AddAssign,
+    DF: Copy + Fn( S, T ) -> S
 {
-    pub fn new( method: M, state: T, dsds: DF ) -> Self {
+    pub fn new( method: M, state: S, time: T, dsdt: DF ) -> Self {
         Self {
             method,
-            dsds,
+            dsdt,
             state,
+            time,
             phantom: std::marker::PhantomData,
         }
     }
 
-    pub fn step( &mut self, ds: U ) {
-        self.state = (self.method)( self.state, ds, self.dsds );
+    pub fn step( &mut self, dt: T ) {
+        self.state = (self.method)( self.state, self.time, dt, self.dsdt );
+        self.time += dt;
     }
 
-    pub fn solve( &mut self, ds: U, steps: usize ) {
+    pub fn solve( &mut self, dt: T, steps: usize ) {
         for _ in 0..steps {
-            self.step( ds );
+            self.step( dt );
         }
     }
 
-    pub fn state( &self ) -> T {
+    pub fn state( &self ) -> S {
         self.state
     }
 
-    pub fn state_mut( &mut self ) -> &mut T {
+    pub fn state_mut( &mut self ) -> &mut S {
         &mut self.state
     }
 
-    pub fn dsds( &self ) -> DF {
-        self.dsds
+    pub fn time( &self ) -> T {
+        self.time
     }
 
-    pub fn dsds_mut( &mut self ) -> &mut DF {
-        &mut self.dsds
+    pub fn time_mut( &mut self ) -> &mut T {
+        &mut self.time
+    }
+
+    pub fn dsdt( &self ) -> DF {
+        self.dsdt
+    }
+
+    pub fn dsdt_mut( &mut self ) -> &mut DF {
+        &mut self.dsdt
     }
 
     pub fn method( &self ) -> M {
@@ -70,13 +83,17 @@ mod tests {
     #[test]
     fn test_solver_step() {
         let mut solver = Solver::new(
-            |state: ( f32, f32 ), ds: f32, dsds: fn( ( f32, f32 ), f32 ) -> ( f32, f32 )| -> ( f32, f32 ) {
-                let dsds = dsds( state, ds );
-                ( state.0 + ( ds * dsds.0 ), state.1 + ( ds * dsds.1 ) )
+            |mut state: ( f32, f32 ), time: f32, dt: f32, dsdt: fn( ( f32, f32 ), f32 ) -> ( f32, f32 )| -> ( f32, f32 ) {
+                let dsdt = dsdt( state, time );
+                state.0 += dt * dsdt.0;
+                state.1 += dt * dsdt.1;
+                state
             },
             ( 0.0_f32, 0.0_f32 ), // initial state
-            |state: ( f32, f32 ), _: f32| -> ( f32, f32 ) {
-                ( 2.0 * state.0, state.1 )
+            0.0_f32, // initial time
+            |mut state: ( f32, f32 ), _: f32| -> ( f32, f32 ) {
+                state.0 *= 2.0;
+                state
             }
         );
         println!( "{:?}", solver.state() );
@@ -89,13 +106,17 @@ mod tests {
     #[test]
     fn test_solver_solve() {
         let mut solver = Solver::new(
-            |state: ( f32, f32 ), ds: f32, dsds: fn( ( f32, f32 ), f32 ) -> ( f32, f32 )| -> ( f32, f32 ) {
-                let dsds = dsds( state, ds );
-                ( state.0 + ( ds * dsds.0 ), state.1 + ( ds * dsds.1 ) )
+            |mut state: ( f32, f32 ), time: f32, dt: f32, dsdt: fn( ( f32, f32 ), f32 ) -> ( f32, f32 )| -> ( f32, f32 ) {
+                let dsdt = dsdt( state, time );
+                state.0 += dt * dsdt.0;
+                state.1 += dt * dsdt.1;
+                state
             },
             ( 0.0_f32, 0.0_f32 ), // initial state
-            |state: ( f32, f32 ), _: f32| -> ( f32, f32 ) {
-                ( 2.0 * state.0, state.1 )
+            0.0_f32, // initial time
+            |mut state: ( f32, f32 ), _: f32| -> ( f32, f32 ) {
+                state.0 *= 2.0;
+                state
             }
         );
         let start = std::time::Instant::now();

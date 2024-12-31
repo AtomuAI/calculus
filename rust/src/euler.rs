@@ -4,48 +4,50 @@ use num::traits::{ Num, Signed, abs };
 
 use crate::solver::Solver;
 
-pub fn euler<T, U, DF>( state: T, ds: U, dsds: DF ) -> T
+pub fn euler<S, T, DF>( state: S, time: T, dt: T, dsdt: DF ) -> S
 where
-    T: Copy + Add<Output = T> + Add<U, Output = T> + Mul<Output = T> + Mul<U, Output = T>,
-    U: Copy + Add<Output = U> + Mul<Output = U>,
-    DF: Copy + Fn( T, U ) -> T
+    S: Copy + Add<Output = S> + Add<T, Output = S> + Mul<Output = S> + Mul<T, Output = S>,
+    T: Copy + Add<Output = T> + Mul<Output = T> + AddAssign,
+    DF: Copy + Fn( S, T ) -> S
 {
-    state + ( dsds( state, ds ) * ds ) // y1 = y0 + ( dx * dy/dx ) -> y1 = y0 + dy
+    state + ( dsdt( state, time ) * dt ) // s1 = s0 + ( dt * ds/dt ) -> s1 = s0 + ds
 }
 
-pub struct EulerSolver<T, U, DF>
+pub struct EulerSolver<S, T, DF>
 where
-    T: Copy + Add<Output = T> + Mul<Output = T>,
-    U: Copy,
-    DF: Fn( T, U ) -> T
+    S: Copy + Add<Output = S> + Mul<Output = S>,
+    T: Copy + AddAssign,
+    DF: Fn( S, T ) -> S
 {
-    solver: Solver<fn( T, U, DF ) -> T, T, U, DF>,
+    solver: Solver<fn( S, T, T, DF ) -> S, S, T, DF>,
 }
 
-impl <T, U, DF> EulerSolver<T, U, DF>
+impl <S, T, DF> EulerSolver<S, T, DF>
 where
-    T: Copy + Add<Output = T> + Add<U, Output = T> + Mul<Output = T> + Mul<U, Output = T>,
-    U: Copy + Add<Output = U> + Mul<Output = U>,
-    DF: Copy + Fn( T, U ) -> T
+    S: Copy + Add<Output = S> + Add<T, Output = S> + Mul<Output = S> + Mul<T, Output = S>,
+    T: Copy + Add<Output = T> + Mul<Output = T> + AddAssign,
+    DF: Copy + Fn( S, T ) -> S
 {
-    pub fn new( state: T, dsds: DF ) -> Self {
+    pub fn new( state: S, time: T, dsdt: DF ) -> Self {
         Self {
-            solver: Solver::new( euler, state, dsds )
+            solver: Solver::new( euler, state, time, dsdt )
         }
     }
 
-    pub fn step( &mut self, ds: U ) {
-        *self.solver.state_mut() = euler( self.solver.state(), ds, self.solver.dsds() );
+    pub fn step( &mut self, dt: T ) {
+        self.solver.step( dt );
     }
 
-    pub fn solve( &mut self, ds: U, steps: usize ) {
-        for _ in 0..steps {
-            self.step( ds );
-        }
+    pub fn solve( &mut self, dt: T, steps: usize ) {
+        self.solver.solve( dt, steps );
     }
 
-    pub fn state( &self ) -> T {
+    pub fn state( &self ) -> S {
         self.solver.state()
+    }
+
+    pub fn time( &self ) -> T {
+        self.solver.time()
     }
 }
 
@@ -58,8 +60,12 @@ mod tests {
     fn test_euler() {
         let mut state = Vector::<f32, 2>::new( [ 0.0, 0.0 ] );
         println!( "{:?}", state );
-        for _ in 0..10 {
-            state = euler( state, 1.0, |state, ds| [ 2.0 * state[ 1 ], state[ 1 ] + ds ].into() );
+        for time in 0..10 {
+            state = euler( state, time as f32, 1.0, |mut state, time| {
+                state[ 0 ] = 2.0 * time;
+                state[ 1 ] = 1.5 * time;
+                state
+            });
             println!( "{:?}", state );
         }
     }
@@ -68,12 +74,18 @@ mod tests {
     fn test_euler_step() {
         let mut solver = EulerSolver::new(
             Vector::<f32, 2>::new( [ 0.0, 0.0 ] ),
-            |state, ds| [ 2.0 * state[ 1 ], state[ 1 ] + ds ].into()
+            0.0,
+            |mut state, time| {
+                state[ 0 ] = 2.0 * time;
+                state[ 1 ] = 1.5 * time;
+                state
+            }
         );
         println!( "{:?}", solver.state() );
         for _ in 0..10 {
+            println!( "Time: {:?}", solver.time() );
             solver.step( 1.0 );
-            println!( "{:?}", solver.state() );
+            println!( "State: {:?}", solver.state() );
         }
     }
 
@@ -81,7 +93,12 @@ mod tests {
     fn test_euler_solver() {
         let mut solver = EulerSolver::new(
             Vector::<f32, 2>::new( [ 0.0, 0.0 ] ),
-            |state, ds| [ 2.0 * state[ 1 ], state[ 1 ] + ds ].into()
+            0.0,
+            |mut state, time| {
+                state[ 0 ] = 2.0 * time;
+                state[ 1 ] = 1.5 * time;
+                state
+            }
         );
         let start = std::time::Instant::now();
         solver.solve( 1.0, 10 );
